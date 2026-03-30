@@ -2,9 +2,10 @@
 # Xatolik bo'lsa to'xtatish
 set -o errexit
 
-# Kutubxonalarni majburiy o'rnatish
-pip install --upgrade pip
-pip install python-telegram-bot gTTS SpeechRecognition pydub
+# Kutubxonalarni o'rnatish
+pip install -r requirements.txt
 
-# Agar kodingizda 'ffmpeg' kerak bo'lsa (ovoz uchun):
-# apt-get update && apt-get install -y ffmpeg
+# FFmpeg-ni majburiy o'rnatish (Render uchun)
+mkdir -p ffmpeg
+curl -L https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz | tar -xJ --strip-components=1 -C ffmpeg
+export PATH=$PATH:$(pwd)/ffmpeg/bin
