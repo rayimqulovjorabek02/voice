@@ -162,7 +162,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tr = GoogleTranslator(source='auto', target=get_lang(uid)).translate(update.message.text)
             await update.message.reply_text(L(uid, "tr_result").format(tr), reply_markup=back_keyboard(uid), parse_mode="Markdown")
         except: await update.message.reply_text("Translation error.")
-
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if get_mode(uid) == MODE_STT:
@@ -171,12 +170,25 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file = await context.bot.get_file(update.message.voice.file_id)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as tmp:
                 await file.download_to_drive(tmp.name)
-                # Bu yerda oddiygina gsr ishlatamiz (pydub/ffmpeg o'rnatilgan bo'lishi kerak)
-                await update.message.reply_text("Ovozni matnga aylantirish uchun serverda FFmpeg bo'lishi shart.", reply_markup=back_keyboard(uid))
+                
+                # Ovozni matnga aylantirish qismi
+                r = sr.Recognizer()
+                # OGG ni WAV ga o'tkazish (FFmpeg endi ishlaydi)
+                wav_path = tmp.name.replace(".ogg", ".wav")
+                subprocess.run(["ffmpeg", "-y", "-i", tmp.name, wav_path], check=True)
+                
+                with sr.AudioFile(wav_path) as source:
+                    audio_data = r.record(source)
+                    text = r.recognize_google(audio_data, language=LANGS[get_lang(uid)]["sr"])
+                    await update.message.reply_text(L(uid, "stt_result").format(text), 
+                                                 reply_markup=back_keyboard(uid), 
+                                                 parse_mode="Markdown")
+                os.unlink(wav_path)
             os.unlink(tmp.name)
-        except: await update.message.reply_text(L(uid, "stt_err"))
+        except Exception as e:
+            logger.error(f"STT Error: {e}")
+            await update.message.reply_text(L(uid, "stt_err"))
         await status.delete()
-
 def main():
     if not TELEGRAM_TOKEN: return
     app = Application.builder().token(TELEGRAM_TOKEN).build()
