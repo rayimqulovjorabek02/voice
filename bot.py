@@ -100,16 +100,44 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif query.data == "modes":
         await query.edit_message_text(L(uid, "mode_select"), reply_markup=mode_keyboard(uid))
-
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    text = update.message.text
+
+    # Agar foydalanuvchi hali til tanlamagan bo'lsa, startga qaytarish
+    if uid not in user_data:
+        user_data[uid] = {"lang": "uz", "mode": MODE_TTS}
+
+    # TTS Rejimi bo'lsa
     if get_mode(uid) == MODE_TTS:
-        text = update.message.text
-        tts = gTTS(text=text, lang=LANGS[get_lang(uid)]["gtts"])
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-            tts.save(tmp.name)
-            await update.message.reply_voice(voice=open(tmp.name, 'rb'))
-            os.unlink(tmp.name)
+        # Yuklanish xabari (ixtiyoriy)
+        status = await update.message.reply_text("⏳...")
+        try:
+            # gTTS yordamida ovoz yaratish
+            lang_code = LANGS[get_lang(uid)]["gtts"]
+            tts = gTTS(text=text, lang=lang_code)
+            
+            # Vaqtinchalik faylga saqlash
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+                temp_name = tmp.name
+                tts.save(temp_name)
+            
+            # Ovozli xabar qilib yuborish (Voice)
+            with open(temp_name, 'rb') as voice_file:
+                await update.message.reply_voice(voice=voice_file)
+            
+            # Faylni o'chirish
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
+                
+        except Exception as e:
+            logger.error(f"TTS Error: {e}")
+            await update.message.reply_text("Xatolik: Ovoz yaratib bo'lmadi.")
+        finally:
+            await status.delete()
+    else:
+        # Agar STT rejimida bo'lsa-yu, matn yuborsa
+        await update.message.reply_text(L(uid, "stt_req"))
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
