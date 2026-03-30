@@ -8,196 +8,158 @@ import http.server
 import socketserver
 from pathlib import Path
 
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
-)
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from gtts import gTTS
 import speech_recognition as sr
-from dotenv import load_dotenv
 
-# .env faylini yuklash
-load_dotenv()
-
-# Logging sozlamalari
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+# --- SOZLAMALAR ---
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# O'zgaruvchilarni olish
-TELEGRAM_TOKEN   = os.getenv("BOT_TOKEN") # Render Environment-dan oladi
-CHANNEL_ID       = os.getenv("CHANNEL_ID", "@your_channel")
-ELEVENLABS_KEY   = os.getenv("ELEVENLABS_API_KEY", "")
+TOKEN = os.getenv("BOT_TOKEN") # Render-da BOT_TOKEN deb kiriting
+PORT = int(os.getenv("PORT", 10000))
 
-# ElevenLabs sozlamalari
-ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
-ELEVENLABS_MODEL    = "eleven_multilingual_v2"
+# --- MODELLAR VA TILLAR ---
+MODE_TTS = "tts"
+MODE_STT = "stt"
 
-# ─── RENDER UCHUN DUMMY SERVER ────────────────────────────────────
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
-    handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", port), handler) as httpd:
-        logger.info(f"Dummy server {port}-portda ishlamoqda")
-        httpd.serve_forever()
-
-# Serverni alohida oqimda ishga tushirish
-threading.Thread(target=run_dummy_server, daemon=True).start()
-
-# ─── TILLAR VA REJIMLAR ──────────────────────────────────────────
 LANGS = {
-    "uz": {
-        "name": "O'zbek", "flag": "🇺🇿", "gtts": "tr", "sr": "uz-UZ",
-        "not_member": "❌ Botdan foydalanish uchun kanalga a'zo bo'ling:\n\n👉 {channel}",
-        "check_btn": "✅ A'zo bo'ldim", "menu_title": "📋 Xizmatni tanlang:",
-        "btn_tts": "🔊 Matn → Ovoz", "btn_stt": "🎤 Ovoz → Matn",
-        "btn_translate": "🌐 Tarjima", "btn_lang": "⚙️ Tilni o'zgartirish",
-        "ask_tts": "✍️ Matn yuboring:", "ask_stt": "🎤 Ovozli xabar yuboring:",
-        "ask_translate": "✍️ Tarjima uchun matn yuboring:",
-        "tts_wait": "🔊 Tayyorlanmoqda...", "stt_wait": "📝 Tanilmoqda...",
-        "tr_wait": "🌐 Tarjima qilinmoqda...", "stt_result": "📝 *Tanilgan matn:*\n\n{}",
-        "tr_result": "🌐 *Tarjima:*\n\n{}", "tts_ok": "🔊 Tayyor!",
-        "stt_err": "❌ Ovoz tanilmadi.", "stt_srv_err": "❌ Xizmatda xato.",
-        "tts_err": "❌ Xato: {}", "tr_err": "❌ Xato: {}",
-        "send_voice": "⚠️ Ovozli xabar yuboring.", "send_text": "⚠️ Matn yuboring.",
-        "select_lang": "🌐 Tilni tanlang:", "lang_set": "✅ Tanlandi: {}",
-        "welcome": "👋 Salom, {}!\nXizmatni tanlang 👇",
-    },
-    "ru": {
-        "name": "Русский", "flag": "🇷🇺", "gtts": "ru", "sr": "ru-RU",
-        "not_member": "❌ Подпишитесь на канал:\n\n👉 {channel}",
-        "check_btn": "✅ Я подписался", "menu_title": "📋 Выберите услуgu:",
-        "btn_tts": "🔊 Текст → Голос", "btn_stt": "🎤 Голос → Текст",
-        "btn_translate": "🌐 Перевод", "btn_lang": "⚙️ Язык",
-        "ask_tts": "✍️ Отправьте текст:", "ask_stt": "🎤 Отправьте голос:",
-        "ask_translate": "✍️ Отправьте текст для перевода:",
-        "tts_wait": "🔊 Озвучиваю...", "stt_wait": "📝 Распознаю...",
-        "tr_wait": "🌐 Перевожу...", "stt_result": "📝 *Текст:*\n\n{}",
-        "tr_result": "🌐 *Перевод:*\n\n{}", "tts_ok": "🔊 Готово!",
-        "stt_err": "❌ Не распознано.", "stt_srv_err": "❌ Ошибка сервиса.",
-        "tts_err": "❌ Ошибка: {}", "tr_err": "❌ Ошибка: {}",
-        "send_voice": "⚠️ Отправьте голос.", "send_text": "⚠️ Отправьте текст.",
-        "select_lang": "🌐 Выберите язык:", "lang_set": "✅ Выбрано: {}",
-        "welcome": "👋 Привет, {}!\nВыберите услугу 👇",
-    }
+    "uz": {"name": "🇺🇿 O'zbek", "gtts": "uz", "sr": "uz-UZ"},
+    "ru": {"name": "🇷🇺 Русский", "gtts": "ru", "sr": "ru-RU"},
+    "en": {"name": "🇺🇸 English", "gtts": "en", "sr": "en-US"}
 }
 
-MODE_TTS, MODE_STT, MODE_TRANSLATE = "tts", "stt", "translate"
-user_state = {}
+# Foydalanuvchi sozlamalari (Vaqtinchalik xotira)
+user_data = {}
 
-# ─── YORDAMCHI FUNKSIYALAR ────────────────────────────────────────
-def get_lang(uid): return user_state.get(uid, {}).get("lang", "uz")
-def get_mode(uid): return user_state.get(uid, {}).get("mode")
-def L(uid, key): return LANGS[get_lang(uid)][key]
-def set_state(uid, **kwargs):
-    if uid not in user_state: user_state[uid] = {}
-    user_state[uid].update(kwargs)
+def get_lang(uid): return user_data.get(uid, {}).get("lang", "uz")
+def get_mode(uid): return user_data.get(uid, {}).get("mode", MODE_TTS)
 
-def back_keyboard(uid):
+def L(uid, key):
+    lang = get_lang(uid)
+    texts = {
+        "start": {"uz": "Assalomu alaykum! Tilni tanlang:", "ru": "Привет! Выберите язык:", "en": "Hello! Choose language:"},
+        "mode_select": {"uz": "Xizmatni tanlang:", "ru": "Выберите услуgu:", "en": "Select service:"},
+        "tts_req": {"uz": "Matn yuboring (ovozga aylantiraman):", "ru": "Отправьте текст:", "en": "Send text:"},
+        "stt_req": {"uz": "Ovozli xabar yuboring (matnga aylantiraman):", "ru": "Отправьте голосовое сообщение:", "en": "Send voice message:"},
+        "stt_wait": {"uz": "Eshityapman... 🎧", "ru": "Слушаю... 🎧", "en": "Listening... 🎧"},
+        "stt_result": {"uz": "Natija: \n\n*{}*", "ru": "Результат: \n\n*{}*", "en": "Result: \n\n*{}*"},
+        "stt_err": {"uz": "Ovozni tushuna olmadim yoki serverda xato.", "ru": "Не удалось распознать голос.", "en": "Could not recognize voice."},
+        "menu": {"uz": "Asosiy menyu", "ru": "Главное меню", "en": "Main menu"},
+        "back": {"uz": "⬅️ Orqaga", "ru": "⬅️ Назад", "en": "⬅️ Back"}
+    }
+    return texts.get(key, {}).get(lang, "Error")
+
+# --- KLAVIATURALAR ---
+def lang_keyboard():
+    return InlineKeyboardMarkup([[InlineKeyboardButton(v["name"], callback_data=f"lang_{k}")] for k, v in LANGS.items()])
+
+def mode_keyboard(uid):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔁 Yana", callback_data=f"mode_{get_mode(uid)}")],
-        [InlineKeyboardButton("📋 Menyu", callback_data="back_menu")],
+        [InlineKeyboardButton("🗣 Text-to-Speech", callback_data="mode_tts")],
+        [InlineKeyboardButton("🎤 Speech-to-Text", callback_data="mode_stt")],
+        [InlineKeyboardButton(L(uid, "back"), callback_data="start")]
     ])
 
-async def check_membership(bot, uid):
-    try:
-        member = await bot.get_chat_member(CHANNEL_ID, uid)
-        return member.status in ("member", "administrator", "creator")
-    except: return True
+def back_keyboard(uid):
+    return InlineKeyboardMarkup([[InlineKeyboardButton(L(uid, "back"), callback_data="modes")]])
 
-# ─── HANDLERS ────────────────────────────────────────────────────
+# --- DUMMY SERVER (RENDER UCHUN) ---
+def run_dummy_server():
+    handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", PORT), handler) as httpd:
+        logger.info(f"Dummy server {PORT}-portda ishlamoqda")
+        httpd.serve_forever()
+
+# --- HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"{v['flag']} {v['name']}", callback_data=f"lang_{k}")] for k, v in LANGS.items()])
-    await update.message.reply_text("🌐 Tilni tanlang / Выберите язык:", reply_markup=kb)
+    user_data[uid] = user_data.get(uid, {"lang": "uz", "mode": MODE_TTS})
+    await update.effective_message.reply_text(L(uid, "start"), reply_markup=lang_keyboard())
 
-async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     uid = query.from_user.id
-    data = query.data
+    await query.answer()
 
-    if data.startswith("lang_"):
-        set_state(uid, lang=data.split("_")[1], mode=None)
-        await query.edit_message_text(L(uid, "welcome").format(query.from_user.first_name), 
-                                     reply_markup=InlineKeyboardMarkup([
-                                         [InlineKeyboardButton(L(uid, "btn_tts"), callback_data="mode_tts")],
-                                         [InlineKeyboardButton(L(uid, "btn_stt"), callback_data="mode_stt")],
-                                         [InlineKeyboardButton(L(uid, "btn_translate"), callback_data="mode_translate")]
-                                     ]))
-    elif data.startswith("mode_"):
-        mode = data.split("_")[1]
-        set_state(uid, mode=mode)
-        await query.edit_message_text(L(uid, f"ask_{mode}"))
-    elif data == "back_menu":
-        set_state(uid, mode=None)
-        await query.edit_message_text(L(uid, "menu_title"), 
-                                     reply_markup=InlineKeyboardMarkup([
-                                         [InlineKeyboardButton(L(uid, "btn_tts"), callback_data="mode_tts")],
-                                         [InlineKeyboardButton(L(uid, "btn_stt"), callback_data="mode_stt")],
-                                         [InlineKeyboardButton(L(uid, "btn_translate"), callback_data="mode_translate")]
-                                     ]))
+    if query.data.startswith("lang_"):
+        user_data[uid]["lang"] = query.data.split("_")[1]
+        await query.edit_message_text(L(uid, "mode_select"), reply_markup=mode_keyboard(uid))
+    
+    elif query.data == "mode_tts":
+        user_data[uid]["mode"] = MODE_TTS
+        await query.edit_message_text(L(uid, "tts_req"), reply_markup=back_keyboard(uid))
+    
+    elif query.data == "mode_stt":
+        user_data[uid]["mode"] = MODE_STT
+        await query.edit_message_text(L(uid, "stt_req"), reply_markup=back_keyboard(uid))
+    
+    elif query.data == "start":
+        await query.edit_message_text(L(uid, "start"), reply_markup=lang_keyboard())
+    
+    elif query.data == "modes":
+        await query.edit_message_text(L(uid, "mode_select"), reply_markup=mode_keyboard(uid))
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    mode = get_mode(uid)
-    if mode == MODE_TTS:
-        status = await update.message.reply_text(L(uid, "tts_wait"))
-        try:
-            tts = gTTS(text=update.message.text, lang=LANGS[get_lang(uid)]["gtts"])
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                tts.save(tmp.name)
-                await update.message.reply_voice(voice=open(tmp.name, "rb"), caption=L(uid, "tts_ok"), reply_markup=back_keyboard(uid))
+    if get_mode(uid) == MODE_TTS:
+        text = update.message.text
+        tts = gTTS(text=text, lang=LANGS[get_lang(uid)]["gtts"])
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            tts.save(tmp.name)
+            await update.message.reply_voice(voice=open(tmp.name, 'rb'))
             os.unlink(tmp.name)
-        except Exception as e: await update.message.reply_text(f"Error: {e}")
-        await status.delete()
-    elif mode == MODE_TRANSLATE:
-        try:
-            from deep_translator import GoogleTranslator
-            tr = GoogleTranslator(source='auto', target=get_lang(uid)).translate(update.message.text)
-            await update.message.reply_text(L(uid, "tr_result").format(tr), reply_markup=back_keyboard(uid), parse_mode="Markdown")
-        except: await update.message.reply_text("Translation error.")
+
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if get_mode(uid) == MODE_STT:
         status = await update.message.reply_text(L(uid, "stt_wait"))
+        ogg_path = None
+        wav_path = None
         try:
             file = await context.bot.get_file(update.message.voice.file_id)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as tmp:
-                await file.download_to_drive(tmp.name)
-                
-                # Ovozni matnga aylantirish qismi
-                r = sr.Recognizer()
-                # OGG ni WAV ga o'tkazish (FFmpeg endi ishlaydi)
-                wav_path = tmp.name.replace(".ogg", ".wav")
-                subprocess.run(["ffmpeg", "-y", "-i", tmp.name, wav_path], check=True)
-                
-                with sr.AudioFile(wav_path) as source:
-                    audio_data = r.record(source)
-                    text = r.recognize_google(audio_data, language=LANGS[get_lang(uid)]["sr"])
-                    await update.message.reply_text(L(uid, "stt_result").format(text), 
-                                                 reply_markup=back_keyboard(uid), 
-                                                 parse_mode="Markdown")
-                os.unlink(wav_path)
-            os.unlink(tmp.name)
+            temp_dir = tempfile.gettempdir()
+            ogg_path = os.path.join(temp_dir, f"v_{uid}.ogg")
+            wav_path = os.path.join(temp_dir, f"v_{uid}.wav")
+            await file.download_to_drive(ogg_path)
+
+            # FFmpeg yo'lini tekshirish
+            ffmpeg_exe = os.path.join(os.getcwd(), "ffmpeg_bin", "ffmpeg")
+            if not os.path.exists(ffmpeg_exe): ffmpeg_exe = "ffmpeg"
+
+            # Konvertatsiya
+            subprocess.run([ffmpeg_exe, "-y", "-i", ogg_path, "-ar", "16000", "-ac", "1", wav_path], 
+                           check=True, capture_output=True)
+
+            r = sr.Recognizer()
+            with sr.AudioFile(wav_path) as source:
+                audio = r.record(source)
+                text = r.recognize_google(audio, language=LANGS[get_lang(uid)]["sr"])
+                await update.message.reply_text(L(uid, "stt_result").format(text), 
+                                               reply_markup=back_keyboard(uid), parse_mode="Markdown")
         except Exception as e:
             logger.error(f"STT Error: {e}")
             await update.message.reply_text(L(uid, "stt_err"))
-        await status.delete()
-def main():
-    if not TELEGRAM_TOKEN: return
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+        finally:
+            for p in [ogg_path, wav_path]:
+                if p and os.path.exists(p): os.unlink(p)
+            await status.delete()
+
+# --- ASOSIY ISHGA TUSHIRISH ---
+if __name__ == '__main__':
+    if not TOKEN:
+        print("XATO: BOT_TOKEN topilmadi!")
+        exit(1)
+
+    # Dummy serverni alohida oqimda yurgizish
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+
+    app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(callback_handler))
+    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    logger.info("Bot ishga tushdi")
-    app.run_polling()
 
-if __name__ == "__main__":
-    main()
+    print("Bot ishga tushdi...")
+    app.run_polling()
