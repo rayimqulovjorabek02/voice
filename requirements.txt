@@ -1,8 +1,4 @@
-python-telegram-bot==21.5
-gTTS==2.5.1
-SpeechRecognition==3.10.4
-deep-translator==1.11.4
-python-dotenv==1.0.1
+python-telegram-bot
+gTTS
+SpeechRecognition
 pydub
-vosk
-soundfile
