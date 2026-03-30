@@ -32,6 +32,16 @@ ELEVENLABS_KEY   = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"  # Sarah ovozi (tabiiy, universal)
 ELEVENLABS_MODEL    = "eleven_multilingual_v2"
 
+# Render uchun soxta port ochish (Port scan timeout xatosini yo'qotadi)
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", port), handler) as httpd:
+        httpd.serve_forever()
+
+# Serverni alohida oqimda ishga tushiramiz
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
 # ─── TILLAR ──────────────────────────────────────────────────────
 
 LANGS = {
