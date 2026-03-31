@@ -6,6 +6,7 @@ import subprocess
 import threading
 import http.server
 import socketserver
+import edge_tts
 from pathlib import Path
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -100,45 +101,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif query.data == "modes":
         await query.edit_message_text(L(uid, "mode_select"), reply_markup=mode_keyboard(uid))
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+ish (Voice)
+            with open(temp_name, 'rb') as voice_file:
+                await update.message.reply_voice(voice=voice_file)
+        async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text
 
-    # Agar foydalanuvchi hali til tanlamagan bo'lsa, startga qaytarish
-    if uid not in user_data:
-        user_data[uid] = {"lang": "uz", "mode": MODE_TTS}
-
-    # TTS Rejimi bo'lsa
     if get_mode(uid) == MODE_TTS:
-        # Yuklanish xabari (ixtiyoriy)
-        status = await update.message.reply_text("⏳...")
+        status = await update.message.reply_text("⏳ Ovoz tayyorlanmoqda...")
         try:
-            # gTTS yordamida ovoz yaratish
-            lang_code = LANGS[get_lang(uid)]["gtts"]
-            tts = gTTS(text=text, lang=lang_code)
+            # Tilga qarab ovozni tanlash (O'zbekcha uchun MadinaNeural)
+            lang = get_lang(uid)
+            voice = "uz-UZ-MadinaNeural" if lang == "uz" else "ru-RU-SvetlanaNeural"
+            if lang == "en": voice = "en-US-GuyNeural"
             
-            # Vaqtinchalik faylga saqlash
+            # Ovozli fayl yaratish
+            communicate = edge_tts.Communicate(text, voice)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
                 temp_name = tmp.name
-                tts.save(temp_name)
+                await communicate.save(temp_name)
             
-            # Ovozli xabar qilib yuborish (Voice)
+            # Ovozli xabarni yuborish
             with open(temp_name, 'rb') as voice_file:
                 await update.message.reply_voice(voice=voice_file)
             
-            # Faylni o'chirish
+            # Faylni tozalash
             if os.path.exists(temp_name):
                 os.unlink(temp_name)
                 
         except Exception as e:
             logger.error(f"TTS Error: {e}")
-            await update.message.reply_text("Xatolik: Ovoz yaratib bo'lmadi.")
+            await update.message.reply_text("Xatolik: O'zbekcha ovoz yaratishda muammo bo'ldi.")
         finally:
             await status.delete()
-    else:
-        # Agar STT rejimida bo'lsa-yu, matn yuborsa
-        await update.message.reply_text(L(uid, "stt_req"))
-
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if get_mode(uid) == MODE_STT:
