@@ -160,3 +160,33 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     logger.info("Bot started...")
     app.run_polling()
+# Dummy serverni biroz ishonchliroq qilish
+def run_dummy_server():
+    class QuietHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, format, *args): return
+
+    with socketserver.TCPServer(("0.0.0.0", PORT), QuietHandler) as httpd:
+        logger.info(f"Render uchun Dummy server {PORT}-portda ochildi")
+        httpd.serve_forever()
+
+# Main qismini quyidagicha yozing
+if __name__ == '__main__':
+    if not TOKEN:
+        logger.error("BOT_TOKEN topilmadi!")
+        exit(1)
+
+    # Serverni asosiy oqimdan oldin ishga tushirish
+    t = threading.Thread(target=run_dummy_server, daemon=True)
+    t.start()
+
+    # Botni qurish
+    app = Application.builder().token(TOKEN).build()
+    
+    # Handlerlarni qo'shish
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+
+    logger.info("Bot polling rejimida ishga tushmoqda...")
+    app.run_polling(drop_pending_updates=True) # Eski xabarlarni tashlab yuboradi (Conflict-ni kamaytiradi)
