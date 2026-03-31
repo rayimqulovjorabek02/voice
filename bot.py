@@ -104,36 +104,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ish (Voice)
             with open(temp_name, 'rb') as voice_file:
                 await update.message.reply_voice(voice=voice_file)
-        async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text
 
     if get_mode(uid) == MODE_TTS:
-        status = await update.message.reply_text("⏳ Ovoz tayyorlanmoqda...")
+        status = await update.message.reply_text("⏳...")
+        temp_name = None
         try:
-            # Tilga qarab ovozni tanlash (O'zbekcha uchun MadinaNeural)
+            # Ovozni tanlash
             lang = get_lang(uid)
             voice = "uz-UZ-MadinaNeural" if lang == "uz" else "ru-RU-SvetlanaNeural"
             if lang == "en": voice = "en-US-GuyNeural"
             
             # Ovozli fayl yaratish
             communicate = edge_tts.Communicate(text, voice)
+            
+            # Vaqtinchalik faylga saqlash
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
                 temp_name = tmp.name
-                await communicate.save(temp_name)
+            
+            # Faylni saqlash (await bilan)
+            await communicate.save(temp_name)
             
             # Ovozli xabarni yuborish
             with open(temp_name, 'rb') as voice_file:
                 await update.message.reply_voice(voice=voice_file)
-            
-            # Faylni tozalash
-            if os.path.exists(temp_name):
-                os.unlink(temp_name)
                 
         except Exception as e:
             logger.error(f"TTS Error: {e}")
-            await update.message.reply_text("Xatolik: O'zbekcha ovoz yaratishda muammo bo'ldi.")
+            await update.message.reply_text("Xatolik: Ovoz yaratib bo'lmadi.")
         finally:
+            # Faylni tozalash va xabarni o'chirish
+            if temp_name and os.path.exists(temp_name):
+                os.unlink(temp_name)
             await status.delete()
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
